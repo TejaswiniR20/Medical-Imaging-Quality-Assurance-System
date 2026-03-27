@@ -1,3 +1,7 @@
+<!--
+Vijay
+The deployment part assigned.
+-->
 # Medical Imaging Quality Assurance System – FastAPI App
 
 
