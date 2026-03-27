@@ -1,298 +1,127 @@
-# Medical Imaging Quality Assurance System
-
-**Deep Learning + Computer Vision + Healthcare AI**
-
-## Problem Statement
-
-Medical imaging such as chest X-rays is commonly used to detect lung diseases like pneumonia. While deep learning models can automatically analyze these images, many systems only give a prediction without showing where the disease is present, and sometimes the predictions may not be reliable. This project aims to develop a Medical Imaging Quality Assurance System that uses a pretrained deep learning model to detect pneumonia in chest X-ray images, highlight the affected region in the image, and evaluate the confidence of the prediction. If the model’s confidence is low, the system will flag the case for expert review to ensure accurate and reliable diagnosis.
+# Confidence-Based Prediction Router
 
 ## Overview
+This module implements a confidence-based routing mechanism for machine learning predictions. It serves as a post-processing layer that interprets model output probabilities and determines whether the prediction is reliable or requires further review.
 
-The **Medical Imaging Quality Assurance System** is an AI-powered healthcare application designed to automatically screen **Chest X-ray images for Pneumonia**. The system uses deep learning and computer vision techniques to analyze X-ray images and assist medical professionals in early diagnosis.
-
-The main goal of this project is to build a **reliable AI-assisted diagnostic pipeline** where predictions are made automatically when the model confidence is high, while **low-confidence predictions are routed to a radiologist for manual review**. This approach introduces a **human-in-the-loop system** that improves safety, reliability, and trust in AI-based medical applications.
-
-This project integrates **deep learning, medical image preprocessing, automated decision routing, and API deployment** into a complete pipeline suitable for real-world healthcare environments.
-
----
-
-# Project Objectives
-
-* Build a **deep learning model** capable of detecting pneumonia from chest X-ray images.
-* Implement a **confidence-based routing system** to decide whether a prediction should be automated or reviewed by a radiologist.
-* Create an **API service using FastAPI** to serve model predictions.
-* Package the system inside a **Docker container for easy deployment**.
+The primary objectives of this module are:
+- Convert raw model outputs into human-readable predictions
+- Evaluate prediction confidence
+- Flag uncertain predictions for expert validation
 
 ---
 
-# System Architecture
-
-![System Architecture](images/architecture.jpeg)
-
-The system workflow follows these steps:
-
-1. Input chest X-ray image is uploaded.
-2. Image undergoes preprocessing using CLAHE-based enhancement and normalization.
-3. Processed image is passed to the deep learning classification model.
-4. The model outputs a prediction probability.
-5. If the confidence score is above a predefined threshold:
-   - Prediction is returned automatically.
-6. If confidence is below the threshold
-    * Image is moved to a **pending_review folder** for radiologist evaluation.
-
----
-
-# Key Features
-
-### 1. Pneumonia Classification Model
-
-A deep learning model is trained to classify chest X-ray images into:
-
-* Pneumonia
-* Normal
-
-Transfer learning techniques are used with architectures such as:
-
-* ResNet50
-* MobileNet
-
-A lightweight ensemble approach is used to balance performance and computational efficiency.
-
----
-
-### 2. Image Preprocessing (CLAHE-Based Enhancement)
-
-To improve the quality of chest X-ray images, Contrast Limited Adaptive Histogram Equalization (CLAHE) is used. This enhances image contrast and makes important features more visible for the model.
-
-Preprocessing steps include:
-* Image resizing
-* Normalization
-* CLAHE contrast enhancement
-* Data augmentation (rotation, flipping, brightness adjustment)
-
----
-
-### 3. Custom Dataset and DataLoader
-
-A custom dataset pipeline is implemented to efficiently load medical images.
-
-The dataset generator:
-
-* Reads X-ray images
-* Returns tensors ready for deep learning models
-
-Example:
+## Function: `route_prediction`
 
 ```python
-from torch.utils.data import Dataset, DataLoader
+def route_prediction(probabilities, threshold=0.85):
+    """
+    probabilities: output from model's softmax layer
+                   e.g. [0.92, 0.08] -> [Normal, Pneumonia]
+    """
+    confidence = max(probabilities)
+    predicted_class = probabilities.index(confidence)
+    label = "NORMAL" if predicted_class == 0 else "PNEUMONIA"
 
-dataset = Dataset(data=image_files, transform=transforms)
-loader = DataLoader(dataset, batch_size=16, shuffle=True)
+    if confidence < threshold:
+        return {
+            "label": label,
+            "confidence": confidence,
+            "flag": True,
+            "reason": "Low confidence — expert review required"
+        }
+    return {
+        "label": label,
+        "confidence": confidence,
+        "flag": False
+    }
 ```
 
 ---
 
-### 4. Confidence-Based Human-in-the-Loop System
+## Parameters
 
-Healthcare AI must be reliable. This project implements a **confidence threshold mechanism**.
-
-Workflow:
-
-* Model outputs probability score
-* If confidence ≥ threshold → automatic prediction
-* If confidence < threshold → send image for human review
-
-Example logic:
-
-```python
-confidence_threshold = 0.80
-
-if prediction_prob >= confidence_threshold:
-    result = "Automated Prediction"
-else:
-    move_to_pending_review(image_path)
-```
-
-Images with uncertain predictions are stored in:
-
-```
-pending_review/
-```
-
-Radiologists can later examine these cases.
+| Parameter     | Type  | Description |
+|--------------|-------|------------|
+| probabilities | list | Model output probabilities (e.g., `[0.92, 0.08]`) |
+| threshold     | float | Confidence threshold (default: 0.85) |
 
 ---
 
-### 5. API Service with FastAPI
+## Methodology
 
-The trained model is deployed using **FastAPI** to allow easy integration with applications.
+1. Identify the maximum probability to determine confidence.
+2. Determine the predicted class based on the index:
+   - `0 → NORMAL`
+   - `1 → PNEUMONIA`
+3. Compare confidence with threshold:
+   - If confidence < threshold → flag for review
+   - Otherwise → accept prediction
 
-Example endpoint:
+---
 
-```
-POST /predict
-```
+## Output Format
 
-Workflow:
-
-1. Upload chest X-ray
-2. Preprocess image using CLAHE-based enhancement
-3. Run model inference
-4. Return prediction or route to review
-
-Example API response:
-
+### High Confidence Prediction
 ```json
 {
-  "prediction": "Pneumonia",
+  "label": "NORMAL",
   "confidence": 0.92,
-  "status": "automated"
+  "flag": false
 }
 ```
 
-or
-
+### Low Confidence Prediction
 ```json
 {
-  "status": "pending_review",
-  "message": "Low confidence prediction routed to radiologist"
+  "label": "PNEUMONIA",
+  "confidence": 0.60,
+  "flag": true,
+  "reason": "Low confidence — expert review required"
 }
 ```
 
 ---
 
-### 6. Docker Deployment
+## Example Usage
 
-The entire application can be containerized using Docker to ensure easy deployment across systems.
+```python
+probabilities = [0.78, 0.22]
 
-Example Docker workflow:
+result = route_prediction(probabilities)
 
-```
-Build Docker Image
-Run Container
-Expose FastAPI endpoint
-```
-
-This ensures the system runs consistently in different environments.
-
----
-
-# Project Structure
-
-```
-medical-imaging-quality-assurance-system
-│
-├── dataset
-│   ├── pneumonia
-│   └── normal
-│
-├── models
-│   └── pneumonia_classifier.pth
-│
-├── preprocessing
-│   └── preprocessing.py
-│
-├── api
-│   └── main.py
-│
-├── pending_review
-│
-├── training
-│   └── train_model.py
-│
-├── Dockerfile
-├── requirements.txt
-└── README.md
+print(result)
 ```
 
 ---
 
-# Technologies Used
+## Use Cases
 
-* Python
-* PyTorch
-* Grad-CAM
-* OpenCV
-* FastAPI
-* Docker
+- Medical image classification (e.g., pneumonia detection)
+- Fraud detection systems
+- Risk-sensitive decision-making systems
+- Machine learning pipelines requiring human oversight
 
 ---
-<!--
-# Installation
 
-Clone the repository:
+## Future Enhancements
 
-```
-git clone https://github.com/yourusername/medical-imaging-quality-assurance-system.git
-```
+- Multi-class classification support
+- Dynamic threshold tuning
+- Logging and monitoring
+- API integration (Flask / FastAPI)
+- Confidence calibration methods
 
-Navigate into the project:
+---
 
-```
-cd medical-imaging-quality-assurance-system
-```
-
-Install dependencies:
+## File Structure
 
 ```
-pip install -r requirements.txt
+confidence_router.py
+README.md
 ```
 
 ---
 
-# Running the Training Pipeline
+## Summary
 
-```
-python training/train_model.py
-```
-
-This will train the pneumonia classification model and save the weights in the **models** folder.
-
----
-
-# Running the API
-
-Start the FastAPI server:
-
-```
-uvicorn api.main:app --reload
-```
-
-Open in browser:
-
-```
-http://127.0.0.1:8000/docs
-```
-
-This provides an interactive API interface.
-
----
-
-# Future Improvements
-
-* Integration with hospital PACS systems
-* Explainable AI for radiology decisions
-* Multi-disease detection
-* Improved uncertainty estimation
-* Cloud deployment for hospital environments
-
----
--->
-## 7. Explainability using Grad-CAM
-
-To improve trust and interpretability, Grad-CAM is used to generate heatmaps that highlight the infected regions in the chest X-ray.
-
-This helps doctors understand why the model made a particular prediction.
-
-# Conclusion
-
-This project demonstrates how AI and deep learning can assist healthcare professionals in medical diagnosis. By integrating custom preprocessing techniques including CLAHE, deep learning classification, confidence-based routing, and human-in-the-loop review, the system provides a safer and more reliable AI-assisted diagnostic workflow for chest X-ray analysis.
-
-Such systems have the potential to **improve diagnostic efficiency, reduce workload for radiologists, and enable faster detection of pneumonia in clinical settings**.
-
----
-<!--
-# License
-
-This project is released under the MIT License.
--->
+This module adds a reliability layer to machine learning systems by evaluating prediction confidence and routing uncertain outputs for expert review. It is particularly useful in high-stakes domains where prediction accuracy and trust are critical.
