@@ -1,0 +1,21 @@
+# Core
+numpy
+pandas
+opencv-python
+
+# Deep Learning (mentioned in README)
+torch
+torchvision
+
+# Web API (mentioned in README)
+fastapi
+uvicorn
+python-multipart
+
+# Testing
+pytest
+
+# Explainability (mentioned in README)
+# grad-cam implementation typically requires these or a specific lib
+matplotlib
+scikit-learn
