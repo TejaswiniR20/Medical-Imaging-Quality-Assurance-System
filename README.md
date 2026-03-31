@@ -70,8 +70,10 @@ Preprocessing steps include:
 * CLAHE contrast enhancement
 * Data augmentation (rotation, flipping, brightness adjustment)
 
+  output link :https://drive.google.com/file/d/1RoHCELxVFjjqPhDSkKetVk2ojJLDXNum/view?usp=sharing
+
+
 ---
-output link :https://drive.google.com/file/d/1RoHCELxVFjjqPhDSkKetVk2ojJLDXNum/view?usp=sharing
 
 ### 3. Custom Dataset and DataLoader
 
