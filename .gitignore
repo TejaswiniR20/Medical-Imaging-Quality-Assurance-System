@@ -27,6 +27,7 @@ var/
 *.egg
 
 # Data folders (contains heavy images)
+data/clahe_balanced/
 data/processed/
 data/enhanced/
 data/clahe_Result/

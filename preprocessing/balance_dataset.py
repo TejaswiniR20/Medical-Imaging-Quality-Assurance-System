@@ -3,95 +3,67 @@ import random
 import shutil
 
 # =========================
-# PATHS
+# BASE CONFIG
 # =========================
-src_base = "data/clahe_Result"
-dst_base = "data/clahe_balanced"
+base_dir = "data/clahe_Result"
+
+# limits for each split
+limits = {
+    "train": 5000,
+    "val": 2000
+}
 
 valid_ext = (".png", ".jpg", ".jpeg")
 
 # =========================
-# TARGET BALANCE
+# FUNCTION
 # =========================
-balance_limits = {
-    "train": 1001,
-    "val": 215
-}
+def reduce_normal(split, limit):
+    normal_dir = os.path.join(base_dir, split, "NORMAL")
+    reduced_dir = os.path.join(base_dir, split, "NORMAL_REDUCED")
 
-# =========================
-# HELPER FUNCTION
-# =========================
-def get_images(folder):
-    return [f for f in os.listdir(folder) if f.lower().endswith(valid_ext)]
+    print(f"\n📁 Processing: {split}")
+    print("Source folder:", normal_dir)
 
-# =========================
-# MAIN FUNCTION
-# =========================
-def process_split(split):
-    print(f"\n📁 Processing {split}...")
+    if not os.path.exists(normal_dir):
+        print(f"❌ ERROR: {split} NORMAL folder not found!")
+        return
 
-    src_split = os.path.join(src_base, split)
-    dst_split = os.path.join(dst_base, split)
+    os.makedirs(reduced_dir, exist_ok=True)
 
-    # recreate split folder
-    if os.path.exists(dst_split):
-        shutil.rmtree(dst_split)
+    images = [img for img in os.listdir(normal_dir) if img.lower().endswith(valid_ext)]
 
-    os.makedirs(dst_split)
+    print("📊 Total NORMAL images found:", len(images))
 
-    # paths
-    src_normal = os.path.join(src_split, "NORMAL")
-    src_pneumonia = os.path.join(src_split, "PNEUMONIA")
+    if len(images) == 0:
+        print("❌ No images found!")
+        return
 
-    dst_normal = os.path.join(dst_split, "NORMAL")
-    dst_pneumonia = os.path.join(dst_split, "PNEUMONIA")
+    random.shuffle(images)
+    selected_images = images[:limit]
 
-    os.makedirs(dst_normal)
-    os.makedirs(dst_pneumonia)
+    print(f"🚀 Copying {len(selected_images)} images...")
 
-    # =========================
-    # COPY PNEUMONIA (FULL)
-    # =========================
-    pneu_images = get_images(src_pneumonia)
+    for i, img in enumerate(selected_images):
+        src = os.path.join(normal_dir, img)
+        dst = os.path.join(reduced_dir, img)
 
-    print(f"🦠 Copying PNEUMONIA: {len(pneu_images)} images")
+        try:
+            shutil.copy2(src, dst)
+        except Exception as e:
+            print(f"⚠ Skipped {img}: {e}")
 
-    for img in pneu_images:
-        shutil.copy2(
-            os.path.join(src_pneumonia, img),
-            os.path.join(dst_pneumonia, img)
-        )
+        if (i + 1) % 500 == 0:
+            print(f"✅ Copied {i+1}/{len(selected_images)}")
 
-    # =========================
-    # NORMAL HANDLING
-    # =========================
-    normal_images = get_images(src_normal)
-
-    if split in balance_limits:
-        limit = balance_limits[split]
-        limit = min(limit, len(normal_images))
-
-        print(f"⚖ Reducing NORMAL to: {limit}")
-
-        selected = random.sample(normal_images, limit)
-    else:
-        # TEST → copy all
-        print(f"📦 Copying FULL NORMAL: {len(normal_images)}")
-        selected = normal_images
-
-    for img in selected:
-        shutil.copy2(
-            os.path.join(src_normal, img),
-            os.path.join(dst_normal, img)
-        )
-
-    print(f"✅ Done {split}")
+    print("🎯 DONE!")
+    print(f"✔ {len(selected_images)} images saved in: {reduced_dir}")
 
 
 # =========================
-# RUN ALL
+# RUN FOR BOTH TRAIN + VAL
 # =========================
-for split in ["train", "val", "test"]:
-    process_split(split)
+for split in ["train", "val"]:
+    reduce_normal(split, limits[split])
 
-print("\n🎯 BALANCED DATASET READY at:", dst_base)
+print("\n✅ ALL DONE (TRAIN + VAL REDUCED)")
