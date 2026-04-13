@@ -1,0 +1,27 @@
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+
+# ── Deep learning ─────────────────────────────────────────────────────────────
+# TensorFlow (MobileNetV2 + Grad-CAM)
+tensorflow==2.15.0
+
+# ── Image processing ──────────────────────────────────────────────────────────
+opencv-python-headless==4.9.0.80
+Pillow==10.3.0
+numpy==1.26.4
+
+# ── Data / ML utils ───────────────────────────────────────────────────────────
+pandas==2.2.2
+scikit-learn==1.4.2
+
+# ── Database ──────────────────────────────────────────────────────────────────
+# SQLite is built into Python — no extra package needed
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+aiofiles==23.2.1
+matplotlib==3.9.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.2.0

@@ -2,8 +2,13 @@ import pandas as pd
 import os
 import shutil
 
+<<<<<<< Updated upstream
 # Paths - each teammate updates these to match their local setup
 CSV_PATH = "data/Data_Entry_2017.csv"
+=======
+
+CSV_PATH = "data/Data_Entry_2017_v2020.csv"
+>>>>>>> Stashed changes
 IMAGES_DIR = "data/images/"
 OUTPUT_DIR = "data/processed/"
 
@@ -27,4 +32,8 @@ def prepare_dataset():
     print(f"Output directory: {OUTPUT_DIR}")
 
 if __name__ == "__main__":
+<<<<<<< Updated upstream
     prepare_dataset()
+=======
+    prepare_dataset()
+>>>>>>> Stashed changes
