@@ -250,7 +250,9 @@ def build_pdf(
     label       = inference_result.get("label", "Unknown")
     pneumo_prob = inference_result.get("pneumonia_prob", 0.0)
     normal_prob = inference_result.get("normal_prob", 0.0)
-    routing     = inference_result.get("routing", "N/A")
+    routing = inference_result.get("routing", "N/A")
+    if isinstance(routing, dict):
+        routing = routing.get("decision", "N/A")
     confidence  = max(pneumo_prob, normal_prob) * 100
 
     card_color = GREEN if label == "Normal" else (RED_C if label == "Pneumonia" else AMBER)
@@ -411,7 +413,7 @@ if __name__ == "__main__":
         "label":          "Pneumonia",
         "pneumonia_prob": 0.87,
         "normal_prob":    0.13,
-        "routing":        "Senior Radiologist Review",
+        "routing": routing_label,
         "heatmap":        mock_heatmap,
     }
 
