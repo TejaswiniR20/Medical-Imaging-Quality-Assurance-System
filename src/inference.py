@@ -1,108 +1,149 @@
 """
-inference.py — Inference script for best_pneumonia_model.keras
-Person 3: Confidence Routing + Grad-CAM integration
-
-Usage:
-    python inference.py --image path/to/xray.jpg --model path/to/model.keras
-    python inference.py --image path/to/xray.jpg --model path/to/model.keras --save_heatmap
+inference.py — Core inference pipeline for the Medical Imaging QA webapp.
+Handles: CLAHE preprocessing → model prediction → Grad-CAM generation
 """
 
-import argparse
 import os
+import sys
+import uuid
 import numpy as np
+import cv2
 import tensorflow as tf
 from PIL import Image
 
-from confidence_router import route_prediction
-from gradcam import GradCAM
+# Allow imports from project root when run directly
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# ── Constants ──────────────────────────────────────────────────────────────────
-IMG_SIZE            = (224, 224)
-HIGH_CONF_THRESHOLD = 0.85
-LOW_CONF_THRESHOLD  = 0.15
+from src.confidence_router import route_prediction
+from src.gradcam import GradCAM
 
+# ── Constants ────────────────────────────────────────────────────────────────
+IMG_SIZE = (224, 224)
+MODEL_PATH = os.getenv("MODEL_PATH", "models/best_pneumonia_model.keras")
 
-def load_model(model_path: str) -> tf.keras.Model:
-    print(f"[INFO] Loading model from: {model_path}")
-    model = tf.keras.models.load_model(model_path)
-    print("[INFO] Model loaded successfully.")
-    return model
-
-
-def preprocess_image(image_path: str) -> np.ndarray:
-    img = Image.open(image_path).convert("RGB")
-    img = img.resize(IMG_SIZE)
-    img_array = np.array(img, dtype=np.float32) / 255.0
-    img_array = np.expand_dims(img_array, axis=0)  # (1, 224, 224, 3)
-    return img_array
+# Lazy-loaded global model (loaded once on first call)
+_model = None
+_gradcam = None
 
 
-def run_inference(model, image_path: str, save_heatmap: bool = False) -> dict:
-    # 1. Preprocess + predict
-    img_array      = preprocess_image(image_path)
-    raw_output     = model.predict(img_array, verbose=0)
+def get_model():
+    global _model, _gradcam
+    if _model is None:
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(
+                f"Model not found at '{MODEL_PATH}'. "
+                "Copy best_pneumonia_model.keras into the models/ folder."
+            )
+        print(f"[Inference] Loading model from: {MODEL_PATH}")
+        _model = tf.keras.models.load_model(MODEL_PATH)
+        _gradcam = GradCAM(_model)
+        print("[Inference] Model loaded ✓")
+    return _model, _gradcam
+
+
+# ── CLAHE preprocessing ──────────────────────────────────────────────────────
+
+def apply_clahe_to_image(image_path: str, output_path: str) -> str:
+    """
+    Read image as grayscale, apply CLAHE, save to output_path.
+    Returns the output_path.
+    """
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        # Try via PIL (handles more formats)
+        pil_img = Image.open(image_path).convert("L")
+        img = np.array(pil_img)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(img)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    cv2.imwrite(output_path, enhanced)
+    return output_path
+
+
+# ── Model preprocessing ──────────────────────────────────────────────────────
+
+def preprocess_for_model(image_path: str) -> np.ndarray:
+    """
+    Load image (grayscale CLAHE output), convert to RGB, resize to 224x224,
+    normalize to [0,1], add batch dimension.
+    """
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        pil_img = Image.open(image_path).convert("L")
+        img = np.array(pil_img)
+
+    img_resized = cv2.resize(img, IMG_SIZE)
+    # Convert grayscale → 3-channel RGB (model expects 3 channels)
+    img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_GRAY2RGB)
+    img_float = img_rgb.astype(np.float32) / 255.0
+    return np.expand_dims(img_float, axis=0)   # (1, 224, 224, 3)
+
+
+# ── Full pipeline ────────────────────────────────────────────────────────────
+
+def run_full_inference(
+    original_image_path: str,
+    session_id: str = None,
+    outputs_dir: str = "outputs"
+) -> dict:
+    """
+    End-to-end inference:
+      1. Apply CLAHE to the uploaded image
+      2. Preprocess for the model
+      3. Run model prediction
+      4. Route the confidence
+      5. Generate Grad-CAM overlay
+
+    Args:
+        original_image_path: Path to the raw uploaded X-ray image.
+        session_id: Optional session identifier for naming outputs.
+        outputs_dir: Root directory for saving CLAHE + GradCAM results.
+
+    Returns:
+        dict with all inference results plus file paths.
+    """
+    model, gradcam = get_model()
+    uid = session_id or str(uuid.uuid4())[:8]
+    basename = os.path.splitext(os.path.basename(original_image_path))[0]
+
+    # 1. CLAHE
+    clahe_path = os.path.join(outputs_dir, "clahe", f"{uid}_{basename}_clahe.png")
+    apply_clahe_to_image(original_image_path, clahe_path)
+
+    # 2. Preprocess
+    img_array = preprocess_for_model(clahe_path)
+
+    # 3. Predict
+    raw_output = model.predict(img_array, verbose=0)
     pneumonia_prob = float(raw_output[0][0])
 
-    # 2. Confidence routing
-    routing = route_prediction(
-        pneumonia_prob,
-        high_threshold=HIGH_CONF_THRESHOLD,
-        low_threshold=LOW_CONF_THRESHOLD,
-    )
+    # 4. Route
+    routing = route_prediction(pneumonia_prob)
 
-    # 3. Grad-CAM
-    heatmap_path = None
-    if save_heatmap:
-        cam        = GradCAM(model)
-        heatmap    = cam.generate(img_array)
-        overlay    = cam.overlay_on_image(image_path, heatmap)
-        heatmap_path = f"outputs/gradcam_{os.path.basename(image_path)}"
-        cam.save(overlay, heatmap_path)
+    # 5. Grad-CAM
+    heatmap = gradcam.generate(img_array)
+    overlay = gradcam.overlay_on_image(clahe_path, heatmap)
+    gradcam_path = os.path.join(outputs_dir, "gradcam", f"{uid}_{basename}_gradcam.png")
+    os.makedirs(os.path.dirname(gradcam_path), exist_ok=True)
+    cv2.imwrite(gradcam_path, overlay)
 
     return {
-        "image":          os.path.basename(image_path),
-        "predicted_class": routing["predicted_class"],
-        "confidence":      round(routing["confidence"] * 100, 2),
-        "pneumonia_prob":  round(pneumonia_prob * 100, 2),
-        "normal_prob":     round((1 - pneumonia_prob) * 100, 2),
-        "decision":        routing["decision"],
-        "needs_review":    routing["needs_review"],
-        "heatmap_saved":   heatmap_path,
+        "session_id":       uid,
+        "original_image":   original_image_path,
+        "clahe_image":      clahe_path,
+        "gradcam_image":    gradcam_path,
+        "pneumonia_prob":   round(pneumonia_prob * 100, 2),
+        "normal_prob":      round((1 - pneumonia_prob) * 100, 2),
+        "predicted_class":  routing["predicted_class"],
+        "confidence":       round(routing["confidence"] * 100, 2),
+        "decision":         routing["decision"],
+        "needs_review":     routing["needs_review"],
+        # Raw values for report agent
+        "pneumonia_prob_raw": pneumonia_prob,
+        "normal_prob_raw":    1 - pneumonia_prob,
+        "heatmap":            heatmap,
+        "label":              routing["predicted_class"],
+        "routing":            routing["decision"],
     }
-
-
-def print_result(result: dict):
-    print("\n" + "=" * 55)
-    print(f"  Image          : {result['image']}")
-    print(f"  Prediction     : {result['predicted_class']}")
-    print(f"  Confidence     : {result['confidence']}%")
-    print(f"  Pneumonia prob : {result['pneumonia_prob']}%")
-    print(f"  Normal prob    : {result['normal_prob']}%")
-    print(f"  Decision       : {result['decision']}")
-    print(f"  Needs review   : {result['needs_review']}")
-    if result["heatmap_saved"]:
-        print(f"  Heatmap saved  : {result['heatmap_saved']}")
-    print("=" * 55 + "\n")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Pneumonia X-ray inference")
-    parser.add_argument("--image",        required=True, help="Path to chest X-ray image")
-    parser.add_argument("--model",        required=True, help="Path to .keras model file")
-    parser.add_argument("--save_heatmap", action="store_true", help="Generate and save Grad-CAM heatmap")
-    args = parser.parse_args()
-
-    if not os.path.exists(args.image):
-        print(f"[ERROR] Image not found: {args.image}")
-        return
-    if not os.path.exists(args.model):
-        print(f"[ERROR] Model not found: {args.model}")
-        return
-
-    model  = load_model(args.model)
-    result = run_inference(model, args.image, save_heatmap=args.save_heatmap)
-    print_result(result)
-
-
-if __name__ == "__main__":
-    main()

@@ -1,6 +1,4 @@
-# confidence_router.py
-# Person 3 - Confidence Routing
-# Author: Anas
+# confidence_router.py — Confidence Routing for Pneumonia Detection
 
 def route_prediction(pneumonia_prob: float, high_threshold=0.85, low_threshold=0.15):
     """
@@ -11,8 +9,8 @@ def route_prediction(pneumonia_prob: float, high_threshold=0.85, low_threshold=0
 
     Args:
         pneumonia_prob: float in [0, 1] — sigmoid output from the model
-        high_threshold: above this → Pneumonia (automated)
-        low_threshold:  below this → Normal (automated)
+        high_threshold: above this → Pneumonia (high confidence)
+        low_threshold:  below this → Normal (high confidence)
         between the two → flagged for expert review
 
     Returns:
@@ -29,7 +27,6 @@ def route_prediction(pneumonia_prob: float, high_threshold=0.85, low_threshold=0
         confidence      = normal_prob
         decision        = "Automated"
     else:
-        # Low-confidence zone — flag for radiologist
         predicted_class = "Pneumonia" if pneumonia_prob >= 0.5 else "Normal"
         confidence      = max(pneumonia_prob, normal_prob)
         decision        = "Review"

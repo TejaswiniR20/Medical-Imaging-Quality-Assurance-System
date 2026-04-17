@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Medical Imaging QA — Pneumonia Detection</title>
+<style>
+/* ─── Reset & Variables ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:    #1a2e4a;
+  --teal:    #0d7377;
+  --teal-lt: #14a0a6;
+  --green:   #2e7d32;
+  --red:     #c62828;
+  --amber:   #f57f17;
+  --bg:      #f0f4f8;
+  --card:    #ffffff;
+  --border:  #d1dbe8;
+  --text:    #1a2e4a;
+  --muted:   #5a6a7e;
+  --shadow:  0 2px 12px rgba(0,0,0,.10);
+  --radius:  12px;
+}
+
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ─── Top Bar ───────────────────────────────────────────────────────────── */
+.topbar {
+  background: var(--navy);
+  color: #fff;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 62px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+.topbar-brand { display: flex; align-items: center; gap: 12px; }
+.topbar-brand .logo { font-size: 28px; }
+.topbar-brand h1 { font-size: 17px; font-weight: 700; line-height: 1.2; }
+.topbar-brand span { font-size: 12px; opacity: .7; display: block; }
+.topbar-accuracy { background: rgba(255,255,255,.1); border-radius: 8px; padding: 6px 14px; text-align: center; }
+.topbar-accuracy small { display: block; font-size: 10px; opacity: .7; }
+.topbar-accuracy strong { font-size: 18px; color: #4dd0e1; }
+
+/* ─── Tab Nav ───────────────────────────────────────────────────────────── */
+.tabnav {
+  display: flex;
+  background: var(--navy);
+  padding: 0 24px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.tab-btn {
+  background: none; border: none; cursor: pointer;
+  color: rgba(255,255,255,.6);
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 3px solid transparent;
+  transition: all .2s;
+  display: flex; align-items: center; gap: 7px;
+}
+.tab-btn:hover { color: #fff; }
+.tab-btn.active { color: #4dd0e1; border-bottom-color: #4dd0e1; }
+.tab-icon { font-size: 16px; }
+
+/* ─── Layout ─────────────────────────────────────────────────────────────── */
+.portal { display: none; padding: 28px 24px; max-width: 1200px; margin: 0 auto; }
+.portal.active { display: block; }
+
+/* ─── Cards ──────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.card-title {
+  font-size: 15px; font-weight: 700; color: var(--navy);
+  margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+}
+.card-title .icon { font-size: 18px; }
+
+/* ─── Upload Area ─────────────────────────────────────────────────────────── */
+.upload-area {
+  border: 2px dashed var(--teal);
+  border-radius: 10px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: rgba(13,115,119,.04);
+  position: relative;
+}
+.upload-area:hover, .upload-area.drag-over {
+  background: rgba(13,115,119,.1);
+  border-color: var(--teal-lt);
+}
+.upload-area input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.upload-icon { font-size: 48px; color: var(--teal); margin-bottom: 10px; }
+.upload-area h3 { font-size: 16px; color: var(--teal); margin-bottom: 6px; }
+.upload-area p { font-size: 13px; color: var(--muted); }
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  padding: 10px 22px; border-radius: 8px; border: none;
+  cursor: pointer; font-size: 14px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 7px;
+  transition: all .2s;
+}
+.btn-primary { background: var(--teal); color: #fff; }
+.btn-primary:hover { background: var(--teal-lt); }
+.btn-danger  { background: var(--red); color: #fff; }
+.btn-success { background: var(--green); color: #fff; }
+.btn-amber   { background: var(--amber); color: #fff; }
+.btn-outline { background: transparent; border: 2px solid var(--teal); color: var(--teal); }
+.btn-outline:hover { background: var(--teal); color: #fff; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+
+/* ─── Grid ───────────────────────────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media(max-width:768px){ .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+/* ─── Stat Cards ─────────────────────────────────────────────────────────── */
+.stat-card {
+  background: var(--card); border-radius: 10px; padding: 20px;
+  border-left: 5px solid var(--teal); box-shadow: var(--shadow);
+}
+.stat-card.red   { border-left-color: var(--red); }
+.stat-card.green { border-left-color: var(--green); }
+.stat-card.amber { border-left-color: var(--amber); }
+.stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.stat-value { font-size: 26px; font-weight: 800; margin: 4px 0; color: var(--navy); }
+.stat-sub   { font-size: 12px; color: var(--muted); }
+
+/* ─── Progress bars ──────────────────────────────────────────────────────── */
+.prob-bar-wrap { margin: 6px 0; }
+.prob-bar-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.prob-bar { height: 10px; background: #e0e7ef; border-radius: 99px; overflow: hidden; }
+.prob-bar-fill { height: 100%; border-radius: 99px; transition: width .8s ease; }
+.fill-red   { background: linear-gradient(90deg,#ef5350,#c62828); }
+.fill-green { background: linear-gradient(90deg,#66bb6a,#2e7d32); }
+.fill-amber { background: linear-gradient(90deg,#ffca28,#f57f17); }
+
+/* ─── Status Badge ───────────────────────────────────────────────────────── */
+.badge {
+  display: inline-block; padding: 4px 12px; border-radius: 99px;
+  font-size: 11px; font-weight: 700; letter-spacing: .3px;
+}
+.badge-red    { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+.badge-amber  { background: #fff8e1; color: #e65100; border: 1px solid #ffe082; }
+.badge-green  { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+.badge-blue   { background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
+.badge-grey   { background: #f5f5f5; color: #616161; border: 1px solid #e0e0e0; }
+
+/* ─── Alert boxes ────────────────────────────────────────────────────────── */
+.alert {
+  border-radius: 10px; padding: 16px 20px; margin: 12px 0;
+  border-left: 5px solid; font-size: 14px;
+}
+.alert-red    { background: #ffebee; border-color: var(--red); color: #b71c1c; }
+.alert-amber  { background: #fff8e1; border-color: var(--amber); color: #e65100; }
+.alert-green  { background: #e8f5e9; border-color: var(--green); color: #1b5e20; }
+.alert-blue   { background: #e3f2fd; border-color: #1976d2; color: #0d47a1; }
+.alert h4 { margin-bottom: 5px; }
+
+/* ─── X-Ray display ──────────────────────────────────────────────────────── */
+.xray-panel { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.xray-img {
+  width: 100%; max-width: 280px; height: 280px; object-fit: cover;
+  border-radius: 8px; border: 2px solid var(--border);
+  background: #0a1628;
+}
+.xray-label { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+
+/* ─── Table ──────────────────────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--navy); color: #fff; padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:hover td { background: rgba(13,115,119,.04); }
+tr:last-child td { border-bottom: none; }
+
+/* ─── Doctor Modal ───────────────────────────────────────────────────────── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.5); z-index: 500;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--card); border-radius: var(--radius);
+  padding: 32px; width: min(420px, 96vw);
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  animation: slideUp .25s ease;
+}
+@keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.modal-title { font-size: 20px; font-weight: 800; color: var(--navy); margin-bottom: 6px; }
+.modal-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+
+/* Case Detail Modal */
+.modal-lg { width: min(900px, 96vw); max-height: 90vh; overflow-y: auto; }
+
+/* ─── Form Controls ──────────────────────────────────────────────────────── */
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 12px; font-weight: 700; color: var(--navy); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+.form-input, .form-select, .form-textarea {
+  width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-size: 14px; color: var(--text);
+  background: #fff; transition: border .2s;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(13,115,119,.12);
+}
+.form-textarea { min-height: 80px; resize: vertical; }
+
+/* ─── Loading Spinner ─────────────────────────────────────────────────────── */
+.spinner {
+  width: 36px; height: 36px; border: 4px solid #e0e7ef;
+  border-top-color: var(--teal); border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px; }
+
+/* ─── Session Box ─────────────────────────────────────────────────────────── */
+.session-box {
+  background: rgba(13,115,119,.07); border: 1px solid rgba(13,115,119,.2);
+  border-radius: 8px; padding: 8px 14px; font-size: 12px; color: var(--teal);
+  display: inline-block;
+}
+
+/* ─── AI Chat Popup ───────────────────────────────────────────────────────── */
+#chat-btn {
+  position: fixed; bottom: 24px; right: 24px; z-index: 400;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--teal); color: #fff; border: none;
+  cursor: pointer; font-size: 24px; box-shadow: 0 4px 20px rgba(13,115,119,.45);
+  transition: all .2s;
+}
+#chat-btn:hover { transform: scale(1.08); background: var(--teal-lt); }
+
+#chat-popup {
+  display: none; position: fixed; bottom: 90px; right: 24px; z-index: 400;
+  width: 340px; height: 480px;
+  background: var(--card); border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.2);
+  flex-direction: column; overflow: hidden;
+  animation: popUp .2s ease;
+}
+#chat-popup.open { display: flex; }
+@keyframes popUp { from { transform: scale(.85) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+
+.chat-header {
+  background: var(--teal); color: #fff; padding: 14px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.chat-header h4 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.chat-header small { font-size: 11px; opacity: .8; }
+.chat-close { background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1; }
+
+.chat-messages {
+  flex: 1; overflow-y: auto; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: #f8fafc;
+}
+.chat-msg { max-width: 85%; padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
+.chat-msg.user { background: var(--teal); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+.chat-msg.bot  { background: #fff; color: var(--text); align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.chat-msg.typing { opacity: .7; font-style: italic; }
+
+.chat-input-row {
+  padding: 10px 12px; border-top: 1px solid var(--border);
+  display: flex; gap: 8px; background: #fff;
+}
+.chat-input-row input {
+  flex: 1; border: 1.5px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; font-size: 13px;
+}
+.chat-input-row input:focus { outline: none; border-color: var(--teal); }
+.chat-send { background: var(--teal); border: none; color: #fff; border-radius: 8px; width: 36px; height: 36px; cursor: pointer; font-size: 16px; }
+
+/* ─── Doctor Section ─────────────────────────────────────────────────────── */
+.doctor-bar {
+  background: linear-gradient(135deg, var(--navy), #2d4a70);
+  color: #fff; border-radius: var(--radius); padding: 18px 24px;
+  margin-bottom: 20px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.doctor-bar h2 { font-size: 18px; }
+.doctor-bar small { opacity: .7; font-size: 12px; }
+
+/* ─── Toast Notification ─────────────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: var(--navy); color: #fff; padding: 10px 22px;
+  border-radius: 99px; font-size: 13px; font-weight: 600;
+  z-index: 600; opacity: 0; transition: opacity .3s; pointer-events: none;
+}
+#toast.show { opacity: 1; }
+
+/* ─── Misc ───────────────────────────────────────────────────────────────── */
+.flex-center { display: flex; align-items: center; justify-content: center; }
+.gap-8 { gap: 8px; }
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.text-muted { color: var(--muted); font-size: 13px; }
+.hidden { display: none !important; }
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+.pulse { animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:.4; } }
+
+.review-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+</style>
+</head>
+<body>
+
+<!-- ═══ TOP BAR ═══════════════════════════════════════════════════════════ -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="logo">🫁</span>
+    <div>
+      <h1>Medical Imaging QA System</h1>
+      <span>AI-Powered Pneumonia Detection</span>
+    </div>
+  </div>
+  <div class="topbar-accuracy">
+    <small>Model Accuracy</small>
+    <strong id="accuracy-val">—</strong>
+  </div>
+</header>
+
+<!-- ═══ TAB NAV ═══════════════════════════════════════════════════════════ -->
+<nav class="tabnav">
+  <button class="tab-btn active" onclick="switchTab('patient')" id="tab-patient">
+    <span class="tab-icon">👤</span> Patient Portal
+  </button>
+  <button class="tab-btn" onclick="switchTab('doctor')" id="tab-doctor">
+    <span class="tab-icon">🩺</span> Doctor Portal
+  </button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- PATIENT PORTAL                                                         -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<section class="portal active" id="portal-patient">
+
+  <!-- Session info row -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <div>
+      <h2 style="font-size:20px;color:var(--navy)">🏥 Patient X-Ray Analysis Portal</h2>
+      <p class="text-muted">Upload your chest X-ray for AI-powered pneumonia screening</p>
+    </div>
+    <div class="session-box">
+      Patient ID: <strong id="session-display">—</strong>
+    </div>
+  </div>
+
+  <!-- Upload + Result Grid -->
+  <div class="grid-2">
+
+    <!-- Upload Card -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📤</span> Upload Chest X-Ray</div>
+      <div class="upload-area" id="upload-area" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <input type="file" id="file-input" accept="image/*" onchange="onFileChange(event)"/>
+        <div class="upload-icon">🫁</div>
+        <h3>Drop X-Ray here or click to browse</h3>
+        <p>Supports JPG, PNG, BMP · Max 20 MB</p>
+      </div>
+
+      <!-- Preview -->
+      <div id="preview-wrap" class="hidden mt-16">
+        <img id="preview-img" alt="X-Ray Preview" style="width:100%;max-height:220px;object-fit:contain;border-radius:8px;border:2px solid var(--border);background:#0a1628;"/>
+        <p id="preview-name" class="text-muted mt-8" style="text-align:center;font-size:12px;"></p>
+      </div>
+
+      <div style="margin-top:16px;display:flex;gap:10px;">
+        <button class="btn btn-primary" id="analyze-btn" onclick="analyzeXray()" disabled>
+          🔬 Analyze X-Ray
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="resetUpload()">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- Results Card -->
+    <div class="card" id="result-card">
+      <div class="card-title"><span class="icon">📊</span> Analysis Results</div>
+
+      <!-- Empty state -->
+      <div id="result-empty" style="text-align:center;padding:40px 20px;color:var(--muted);">
+        <div style="font-size:48px;margin-bottom:12px;">🔍</div>
+        <p>Upload an X-ray and click <strong>Analyze</strong> to see results</p>
+      </div>
+
+      <!-- Loader -->
+      <div id="result-loader" class="hidden loader-wrap">
+        <div class="spinner"></div>
+        <p style="color:var(--teal);font-weight:600">Analyzing X-Ray…</p>
+        <small class="text-muted">Applying CLAHE enhancement &amp; running inference</small>
+      </div>
+
+      <!-- Results -->
+      <div id="result-content" class="hidden">
+        <!-- Diagnosis status -->
+        <div id="diagnosis-alert" class="alert"></div>
+
+        <!-- Probabilities -->
+        <div class="grid-2 mt-8" style="margin-top:12px;">
+          <div class="stat-card red">
+            <div class="stat-label">Pneumonia Prob</div>
+            <div class="stat-value" id="r-pneumo">—</div>
+            <div class="stat-sub">Probability score</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-label">Normal Prob</div>
+            <div class="stat-value" id="r-normal">—</div>
+            <div class="stat-sub">Probability score</div>
+          </div>
+        </div>
+
+        <div class="prob-bar-wrap mt-8">
+          <div class="prob-bar-label"><span>Pneumonia</span><span id="r-pneumo-pct">—</span></div>
+          <div class="prob-bar"><div class="prob-bar-fill fill-red" id="bar-pneumo" style="width:0%"></div></div>
+        </div>
+        <div class="prob-bar-wrap">
+          <div class="prob-bar-label"><span>Normal</span><span id="r-normal-pct">—</span></div>
+          <div class="prob-bar"><div class="prob-bar-fill fill-green" id="bar-normal" style="width:0%"></div></div>
+        </div>
+
+        <hr class="divider"/>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <span>Confidence: <strong id="r-conf">—</strong></span>
+          <span id="r-badge" class="badge">—</span>
+          <span id="r-decision-badge" class="badge badge-blue" style="margin-left:auto;">—</span>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="generateReport()">📄 Generate PDF Report</button>
+          <button class="btn btn-outline btn-sm" onclick="loadHistory()">📋 View History</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GradCAM Display -->
+  <div class="card hidden" id="gradcam-card">
+    <div class="card-title"><span class="icon">🔥</span> Grad-CAM Activation Heatmap</div>
+    <p class="text-muted" style="margin-bottom:16px;font-size:13px;">
+      The heatmap highlights regions the AI model focused on when making its prediction.
+      Red/warm areas indicate stronger activation — regions most associated with pneumonia.
+    </p>
+    <div class="grid-2">
+      <div class="xray-panel">
+        <img id="orig-img" class="xray-img" alt="Original X-Ray"/>
+        <span class="xray-label">📷 Original X-Ray</span>
+      </div>
+      <div class="xray-panel">
+        <img id="gradcam-img" class="xray-img" alt="Grad-CAM Overlay"/>
+        <span class="xray-label">🔥 Grad-CAM Overlay</span>
+      </div>
+    </div>
+    <div id="consult-btn-wrap" class="hidden" style="margin-top:16px;">
+      <div class="alert alert-blue">
+        <h4>💬 Doctor Consultation</h4>
+        <span id="consult-msg">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="card" id="history-card">
+    <div class="card-title" style="justify-content:space-between;">
+      <span><span class="icon">📋</span> My Case History</span>
+      <button class="btn btn-outline btn-sm" onclick="loadHistory()">🔄 Refresh</button>
+    </div>
+    <div id="history-content">
+      <p class="text-muted" style="padding:20px 0;text-align:center;">Your previous analyses will appear here.</p>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- DOCTOR PORTAL                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<section class="portal" id="portal-doctor">
+
+  <!-- Doctor Login Banner -->
+  <div id="doctor-login-banner" class="card" style="text-align:center;padding:48px 24px;">
+    <div style="font-size:64px;margin-bottom:16px;">🩺</div>
+    <h2 style="color:var(--navy);margin-bottom:8px;">Doctor Portal</h2>
+    <p class="text-muted" style="margin-bottom:24px;">Sign in with your medical credentials to review patient cases and provide consultations.</p>
+    <button class="btn btn-primary" onclick="openLoginModal()">🔐 Doctor Login</button>
+    <!--<div style="margin-top:16px;padding:12px;background:#f0f4f8;border-radius:8px;font-size:12px;color:var(--muted);">
+      Default: <strong>doctor</strong> / <strong>doctor123</strong>
+    </div>-->
+  </div>
+
+  <!-- Doctor Dashboard (hidden until logged in) -->
+  <div id="doctor-dashboard" class="hidden">
+    <div class="doctor-bar">
+      <div>
+        <h2>🩺 Doctor Dashboard</h2>
+        <small id="doctor-name-display">Welcome, Doctor</small>
+      </div>
+      <button class="btn" style="background:rgba(255,255,255,.15);color:#fff;" onclick="doctorLogout()">
+        🚪 Logout
+      </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid-3" id="doctor-stats" style="margin-bottom:20px;">
+      <div class="stat-card"><div class="stat-label">Total Cases</div><div class="stat-value" id="stat-total">0</div></div>
+      <div class="stat-card amber"><div class="stat-label">Pending Review</div><div class="stat-value" id="stat-pending">0</div></div>
+      <div class="stat-card green"><div class="stat-label">Reviewed</div><div class="stat-value" id="stat-reviewed">0</div></div>
+    </div>
+
+    <!-- Cases Table -->
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between;">
+        <span><span class="icon">📂</span> Patient Cases</span>
+        <div style="display:flex;gap:8px;">
+          <select class="form-select" id="filter-select" onchange="filterCases()" style="width:160px;padding:6px 10px;font-size:13px;">
+            <option value="all">All Cases</option>
+            <option value="pending">Pending Review</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="pneumonia">Pneumonia</option>
+            <option value="normal">Normal</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="loadDoctorCases()">🔄 Refresh</button>
+        </div>
+      </div>
+      <div id="doctor-cases-content">
+        <div class="loader-wrap"><div class="spinner"></div><p class="text-muted">Loading cases…</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══ DOCTOR LOGIN MODAL ════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="login-modal">
+  <div class="modal">
+    <div class="modal-title">🔐 Doctor Login</div>
+    <div class="modal-sub">Enter your credentials to access the doctor portal</div>
+    <div id="login-error" class="hidden alert alert-red" style="margin-bottom:14px;">Invalid credentials. Please try again.</div>
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input class="form-input" id="login-user" placeholder="doctor1" type="text"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" id="login-pass" placeholder="••••••••" type="password" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
+      <button class="btn btn-outline" onclick="closeLoginModal()">Cancel</button>
+      <button class="btn btn-primary" id="login-btn" onclick="doLogin()">🔐 Login</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ CASE DETAIL MODAL ═════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="case-modal">
+  <div class="modal modal-lg">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <div>
+        <div class="modal-title">📁 Case Review</div>
+        <div class="modal-sub" id="case-modal-sub">Patient Analysis Details</div>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="closeCaseModal()">✕ Close</button>
+    </div>
+    <div id="case-modal-content">
+      <div class="loader-wrap"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══ AI AGENT CHAT ═════════════════════════════════════════════════════ -->
+<button id="chat-btn" onclick="toggleChat()" title="AI Medical Assistant">🤖</button>
+
+<div id="chat-popup">
+  <div class="chat-header">
+    <div>
+      <h4>🤖 AI Medical Assistant</h4>
+      <small>Powered by Groq · LLaMA 3.3 70B</small>
+    </div>
+    <button class="chat-close" onclick="toggleChat()">×</button>
+  </div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-msg bot">
+      👋 Hello! I'm your AI medical assistant. I can help explain pneumonia detection results, answer questions about chest X-rays, or provide general health information. How can I help you today?
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chat-input" placeholder="Ask about your results…" onkeydown="if(event.key==='Enter')sendChat()"/>
+    <button class="chat-send" onclick="sendChat()">➤</button>
+  </div>
+</div>
+
+<!-- ═══ TOAST ══════════════════════════════════════════════════════════════ -->
+<div id="toast"></div>
+
+
+<!-- ═══ JAVASCRIPT ════════════════════════════════════════════════════════ -->
+<script>
+// ─── State ──────────────────────────────────────────────────────────────────
+const state = {
+  sessionId:     localStorage.getItem('session_id') || generateId(),
+  doctorToken:   localStorage.getItem('doctor_token') || null,
+  doctorName:    localStorage.getItem('doctor_name') || '',
+  currentCaseId: null,
+  allDoctorCases: [],
+};
+
+function generateId() {
+  const id = 'PAT-' + Math.random().toString(36).substr(2,9).toUpperCase();
+  localStorage.setItem('session_id', id);
+  return id;
+}
+
+document.getElementById('session-display').textContent = state.sessionId;
+
+// ─── Load model accuracy ──────────────────────────────────────────────────
+(async ()=>{
+  try {
+    const r = await fetch('/api/accuracy');
+    const d = await r.json();
+    document.getElementById('accuracy-val').textContent = d.accuracy + '%';
+  } catch(e) {
+    document.getElementById('accuracy-val').textContent = 'N/A';
+  }
+})();
+
+// ─── Tab switching ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.portal').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('portal-' + tab).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+
+  if (tab === 'doctor') {
+    if (state.doctorToken) showDoctorDashboard();
+    else showDoctorLogin();
+  }
+  if (tab === 'patient') loadHistory();
+}
+
+// ─── Upload / File ─────────────────────────────────────────────────────────
+let selectedFile = null;
+
+function onFileChange(e) {
+  const file = e.target.files[0];
+  if (file) setFile(file);
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-area').classList.add('drag-over');
+}
+function onDragLeave(e) {
+  document.getElementById('upload-area').classList.remove('drag-over');
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-area').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) setFile(file);
+}
+
+function setFile(file) {
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('preview-img').src = ev.target.result;
+    document.getElementById('preview-name').textContent = file.name + ' · ' + (file.size/1024).toFixed(1) + ' KB';
+    document.getElementById('preview-wrap').classList.remove('hidden');
+    document.getElementById('analyze-btn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetUpload() {
+  selectedFile = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('preview-wrap').classList.add('hidden');
+  document.getElementById('analyze-btn').disabled = true;
+  document.getElementById('result-empty').classList.remove('hidden');
+  document.getElementById('result-content').classList.add('hidden');
+  document.getElementById('result-loader').classList.add('hidden');
+  document.getElementById('gradcam-card').classList.add('hidden');
+  state.currentCaseId = null;
+}
+
+// ─── Analyze X-Ray ─────────────────────────────────────────────────────────
+async function analyzeXray() {
+  if (!selectedFile) return;
+
+  document.getElementById('result-empty').classList.add('hidden');
+  document.getElementById('result-content').classList.add('hidden');
+  document.getElementById('result-loader').classList.remove('hidden');
+  document.getElementById('gradcam-card').classList.add('hidden');
+  document.getElementById('analyze-btn').disabled = true;
+
+  const form = new FormData();
+  form.append('file', selectedFile);
+  form.append('session_id', state.sessionId);
+
+  try {
+    const res  = await fetch('/api/analyze', { method:'POST', body: form });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.detail || 'Analysis failed');
+
+    state.currentCaseId = data.case_id;
+    renderResults(data);
+    renderGradcam(data);
+    loadHistory();
+
+  } catch(e) {
+    document.getElementById('result-loader').classList.add('hidden');
+    document.getElementById('result-empty').classList.remove('hidden');
+    showToast('❌ ' + e.message, 4000);
+  } finally {
+    document.getElementById('analyze-btn').disabled = false;
+  }
+}
+
+function renderResults(d) {
+  document.getElementById('result-loader').classList.add('hidden');
+  document.getElementById('result-content').classList.remove('hidden');
+
+  const rec = d.recommendation;
+
+  // Alert box
+  const alertEl = document.getElementById('diagnosis-alert');
+  const cls = {high:'alert-red', medium:'alert-amber', low:'alert-green'}[rec.severity];
+  alertEl.className = `alert ${cls}`;
+  alertEl.innerHTML = `<h4>${rec.label} ${rec.severity==='high'?'🚨':rec.severity==='medium'?'⚠️':'✅'}</h4>${rec.message}`;
+
+  // Stats
+  document.getElementById('r-pneumo').textContent     = d.pneumonia_prob + '%';
+  document.getElementById('r-normal').textContent     = d.normal_prob    + '%';
+  document.getElementById('r-pneumo-pct').textContent = d.pneumonia_prob + '%';
+  document.getElementById('r-normal-pct').textContent = d.normal_prob    + '%';
+  document.getElementById('r-conf').textContent       = d.confidence     + '%';
+
+  document.getElementById('bar-pneumo').style.width = d.pneumonia_prob + '%';
+  document.getElementById('bar-normal').style.width = d.normal_prob    + '%';
+
+  const badge = document.getElementById('r-badge');
+  badge.textContent  = d.predicted_class;
+  badge.className    = 'badge ' + (d.predicted_class==='Pneumonia'?'badge-red':'badge-green');
+
+  const decBadge = document.getElementById('r-decision-badge');
+  decBadge.textContent = d.decision === 'Review' ? '⚠️ Needs Review' : '✅ ' + d.decision;
+  decBadge.className = 'badge ' + (d.decision==='Review'?'badge-amber':'badge-blue');
+}
+
+function renderGradcam(d) {
+  document.getElementById('gradcam-card').classList.remove('hidden');
+
+  if (d.original_image) document.getElementById('orig-img').src = d.original_image;
+  if (d.gradcam_image)  document.getElementById('gradcam-img').src = d.gradcam_image;
+
+  const cw = document.getElementById('consult-btn-wrap');
+  const cm = document.getElementById('consult-msg');
+  cw.classList.remove('hidden');
+  cm.textContent = d.recommendation.message;
+}
+
+// ─── Generate PDF Report ───────────────────────────────────────────────────
+async function generateReport() {
+  if (!state.currentCaseId) { showToast('No active case', 2000); return; }
+  showToast('⏳ Generating PDF report…', 3000);
+  try {
+    const res = await fetch(`/api/report/${state.currentCaseId}`, { method:'POST' });
+    if (!res.ok) {
+      const d = await res.json();
+      showToast('❌ ' + (d.detail || 'Report failed'), 4000);
+      return;
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url; a.download = `pneumonia_report_${state.currentCaseId}.pdf`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast('✅ Report downloaded!');
+  } catch(e) {
+    showToast('❌ ' + e.message, 4000);
+  }
+}
+
+// ─── Case History ──────────────────────────────────────────────────────────
+async function loadHistory() {
+  const container = document.getElementById('history-content');
+  try {
+    const res  = await fetch(`/api/history/${state.sessionId}`);
+    const data = await res.json();
+
+    if (!data.length) {
+      container.innerHTML = '<p class="text-muted" style="padding:20px 0;text-align:center;">No previous analyses found.</p>';
+      return;
+    }
+
+    let html = `<div class="tbl-wrap"><table>
+    <thead><tr>
+      <th>#</th><th>Date</th><th>Prediction</th><th>Pneumonia%</th>
+      <th>Confidence</th><th>Status</th><th>Doctor Review</th><th>Action</th>
+    </tr></thead><tbody>`;
+
+    for (const c of data) {
+      const sev = c.recommendation?.severity || 'low';
+      const bc  = sev==='high'?'badge-red':sev==='medium'?'badge-amber':'badge-green';
+      const drStatus = c.doctor_diagnosis
+        ? `<span class="badge badge-blue">✅ ${c.doctor_diagnosis}</span>`
+        : `<span class="badge badge-grey">Pending</span>`;
+      html += `<tr>
+        <td><strong>${c.id}</strong></td>
+        <td>${(c.created_at||'').substring(0,16)}</td>
+        <td><span class="badge ${c.predicted_class==='Pneumonia'?'badge-red':'badge-green'}">${c.predicted_class}</span></td>
+        <td>${(c.pneumonia_prob||0).toFixed(1)}%</td>
+        <td>${(c.confidence||0).toFixed(1)}%</td>
+        <td>${drStatus}</td>
+        <td>${drStatus}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="viewCaseDetail(${c.id})">View</button></td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+
+  } catch(e) {
+    container.innerHTML = '<p class="text-muted">Error loading history.</p>';
+  }
+}
+
+async function viewCaseDetail(caseId) {
+  document.getElementById('case-modal').classList.add('open');
+  document.getElementById('case-modal-content').innerHTML = '<div class="loader-wrap"><div class="spinner"></div></div>';
+  try {
+    const res  = await fetch(`/api/case/${caseId}`);
+    const d    = await res.json();
+    renderCaseModal(d, false);
+  } catch(e) {
+    document.getElementById('case-modal-content').innerHTML = `<p class="text-muted">${e.message}</p>`;
+  }
+}
+
+// ─── Doctor Auth ──────────────────────────────────────────────────────────
+function openLoginModal()  { document.getElementById('login-modal').classList.add('open'); }
+function closeLoginModal() { document.getElementById('login-modal').classList.remove('open'); }
+
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  if (!u||!p) { showToast('Enter credentials', 2000); return; }
+
+  document.getElementById('login-btn').disabled = true;
+  document.getElementById('login-error').classList.add('hidden');
+
+  try {
+    const res  = await fetch('/api/doctor/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({username:u, password:p}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+
+    state.doctorToken = data.access_token;
+    state.doctorName  = data.full_name || data.username;
+    localStorage.setItem('doctor_token', data.access_token);
+    localStorage.setItem('doctor_name',  state.doctorName);
+
+    closeLoginModal();
+    showDoctorDashboard();
+    showToast('✅ Welcome, ' + state.doctorName);
+  } catch(e) {
+    document.getElementById('login-error').classList.remove('hidden');
+  } finally {
+    document.getElementById('login-btn').disabled = false;
+  }
+}
+
+function doctorLogout() {
+  state.doctorToken = null; state.doctorName = '';
+  localStorage.removeItem('doctor_token');
+  localStorage.removeItem('doctor_name');
+  showDoctorLogin();
+  showToast('Logged out');
+}
+
+function showDoctorLogin() {
+  document.getElementById('doctor-login-banner').classList.remove('hidden');
+  document.getElementById('doctor-dashboard').classList.add('hidden');
+}
+
+function showDoctorDashboard() {
+  document.getElementById('doctor-login-banner').classList.add('hidden');
+  document.getElementById('doctor-dashboard').classList.remove('hidden');
+  document.getElementById('doctor-name-display').textContent = 'Welcome, ' + state.doctorName;
+  loadDoctorCases();
+}
+
+// ─── Doctor Cases ─────────────────────────────────────────────────────────
+async function loadDoctorCases() {
+  if (!state.doctorToken) return;
+  document.getElementById('doctor-cases-content').innerHTML =
+    '<div class="loader-wrap"><div class="spinner"></div><p class="text-muted">Loading cases…</p></div>';
+  try {
+    const res  = await fetch('/api/doctor/cases', {
+      headers: { 'Authorization': 'Bearer ' + state.doctorToken }
+    });
+    if (res.status === 401) { doctorLogout(); return; }
+    state.allDoctorCases = await res.json();
+    renderDoctorCases(state.allDoctorCases);
+  } catch(e) {
+    document.getElementById('doctor-cases-content').innerHTML = `<p class="text-muted">${e.message}</p>`;
+  }
+}
+
+function filterCases() {
+  const f = document.getElementById('filter-select').value;
+  let cases = state.allDoctorCases;
+  if (f==='pending')   cases = cases.filter(c=>!c.doctor_diagnosis);
+  if (f==='reviewed')  cases = cases.filter(c=>!!c.doctor_diagnosis);
+  if (f==='pneumonia') cases = cases.filter(c=>c.predicted_class==='Pneumonia');
+  if (f==='normal')    cases = cases.filter(c=>c.predicted_class==='Normal');
+  renderDoctorCases(cases);
+}
+
+function renderDoctorCases(cases) {
+  const total    = cases.length;
+  const reviewed = cases.filter(c=>!!c.doctor_diagnosis).length;
+  const pending  = total - reviewed;
+
+  document.getElementById('stat-total').textContent    = state.allDoctorCases.length;
+  document.getElementById('stat-pending').textContent  = state.allDoctorCases.filter(c=>!c.doctor_diagnosis).length;
+  document.getElementById('stat-reviewed').textContent = state.allDoctorCases.filter(c=>!!c.doctor_diagnosis).length;
+
+  if (!cases.length) {
+    document.getElementById('doctor-cases-content').innerHTML = '<p class="text-muted" style="padding:20px;text-align:center;">No cases found.</p>';
+    return;
+  }
+
+  let html = `<div class="tbl-wrap"><table>
+  <thead><tr>
+    <th>Case ID</th><th>Patient</th><th>Date</th><th>AI Prediction</th>
+    <th>Pneumonia%</th><th>Confidence</th><th>AI Routing</th>
+    <th>Doctor Diagnosis</th><th>Actions</th>
+  </tr></thead><tbody>`;
+
+  for (const c of cases) {
+    const reviewed = !!c.doctor_diagnosis;
+    html += `<tr>
+      <td><strong>#${c.id}</strong></td>
+      <td><small>${c.session_id}</small></td>
+      <td>${(c.created_at||'').substring(0,16)}</td>
+      <td><span class="badge ${c.predicted_class==='Pneumonia'?'badge-red':'badge-green'}">${c.predicted_class}</span></td>
+      <td><strong ${c.pneumonia_prob>85?'style="color:var(--red)"':c.pneumonia_prob>50?'style="color:var(--amber)"':''}>${(c.pneumonia_prob||0).toFixed(1)}%</strong></td>
+      <td>${(c.confidence||0).toFixed(1)}%</td>
+      <td><span class="badge ${c.decision==='Review'?'badge-amber':'badge-blue'}">${c.decision}</span></td>
+      <td>${reviewed
+        ? `<span class="badge badge-blue">${c.doctor_diagnosis}</span>`
+        : `<span class="badge badge-grey">⏳ Pending</span>`}
+      </td>
+      <td>
+        <button class="btn btn-primary btn-sm" onclick="openCaseReview(${c.id})">
+          ${reviewed ? '✏️ Update' : '🔍 Review'}
+        </button>
+      </td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  document.getElementById('doctor-cases-content').innerHTML = html;
+}
+
+// ─── Case Review Modal ─────────────────────────────────────────────────────
+async function openCaseReview(caseId) {
+  document.getElementById('case-modal').classList.add('open');
+  document.getElementById('case-modal-content').innerHTML = '<div class="loader-wrap"><div class="spinner"></div></div>';
+  try {
+    const res = await fetch(`/api/case/${caseId}`, {
+      headers: { 'Authorization': 'Bearer ' + state.doctorToken }
+    });
+    const d = await res.json();
+    document.getElementById('case-modal-sub').textContent = `Case #${caseId} · Patient: ${d.session_id}`;
+    renderCaseModal(d, true);
+  } catch(e) {
+    document.getElementById('case-modal-content').innerHTML = `<p class="text-muted">${e.message}</p>`;
+  }
+}
+
+function renderCaseModal(d, isDoctor) {
+  const sev = d.recommendation?.severity || 'low';
+  const alertCls = sev==='high'?'alert-red':sev==='medium'?'alert-amber':'alert-green';
+
+  let html = `
+  <div class="alert ${alertCls}" style="margin-bottom:16px;">
+    <strong>${d.recommendation?.label || d.predicted_class}</strong> — ${d.recommendation?.message || ''}
+  </div>
+
+  <!-- Stats row -->
+  <div class="grid-3" style="margin-bottom:16px;">
+    <div class="stat-card red">
+      <div class="stat-label">Pneumonia Prob</div>
+      <div class="stat-value">${(d.pneumonia_prob||0).toFixed(1)}%</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Normal Prob</div>
+      <div class="stat-value">${(d.normal_prob||0).toFixed(1)}%</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Confidence</div>
+      <div class="stat-value">${(d.confidence||0).toFixed(1)}%</div>
+    </div>
+  </div>
+
+  <!-- Images -->
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="xray-panel">
+      <img src="${d.original_url}" class="xray-img" alt="Original"/>
+      <span class="xray-label">📷 Original X-Ray (Patient Uploaded)</span>
+    </div>
+    <div class="xray-panel">
+      <img src="${d.gradcam_url}" class="xray-img" alt="GradCAM"/>
+      <span class="xray-label">🔥 Grad-CAM Overlay</span>
+    </div>
+  </div>`;
+
+  // Doctor review section
+  if (isDoctor) {
+    const existing = d.doctor_diagnosis || '';
+    const existingNotes = d.doctor_notes || '';
+    html += `
+    <hr class="divider"/>
+    <div class="card-title"><span class="icon">✍️</span> Doctor Review & Diagnosis</div>
+    ${d.reviewed_at ? `<div class="alert alert-blue" style="margin-bottom:12px;">
+      Previously reviewed on ${d.reviewed_at} by ${d.doctor_username}
+      — Diagnosis: <strong>${d.doctor_diagnosis}</strong>
+    </div>` : ''}
+    <div class="form-group">
+      <label class="form-label">Diagnosis</label>
+      <select class="form-select" id="doctor-diag-select">
+        <option value="" ${!existing?'selected':''}>— Select Diagnosis —</option>
+        <option value="Pneumonia Confirmed" ${existing==='Pneumonia Confirmed'?'selected':''}>🔴 Pneumonia Confirmed</option>
+        <option value="Possible Pneumonia" ${existing==='Possible Pneumonia'?'selected':''}>🟡 Possible Pneumonia</option>
+        <option value="Normal - No Pneumonia" ${existing==='Normal - No Pneumonia'?'selected':''}>🟢 Normal - No Pneumonia</option>
+        <option value="Requires Further Tests" ${existing==='Requires Further Tests'?'selected':''}>🔵 Requires Further Tests</option>
+        <option value="Inconclusive" ${existing==='Inconclusive'?'selected':''}>⚪ Inconclusive</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Clinical Notes (Optional)</label>
+      <textarea class="form-textarea" id="doctor-notes-input" placeholder="Enter clinical observations, recommendations, or notes…">${existingNotes}</textarea>
+    </div>
+    <div class="review-actions">
+      <button class="btn btn-success" onclick="submitReview(${d.id})">✅ Submit Review</button>
+      <button class="btn btn-outline" onclick="closeCaseModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" onclick="generateReportForCase(${d.id})">📄 Generate PDF</button>
+    </div>`;
+  } else {
+    // Patient view — show doctor review if exists
+    if (d.doctor_diagnosis) {
+      html += `
+      <hr class="divider"/>
+      <div class="alert alert-blue">
+        <h4>🩺 Doctor's Review</h4>
+        <strong>Diagnosis:</strong> ${d.doctor_diagnosis}<br/>
+        ${d.doctor_notes ? `<strong>Notes:</strong> ${d.doctor_notes}<br/>` : ''}
+        <small>Reviewed by ${d.doctor_username} on ${(d.reviewed_at||'').substring(0,16)}</small>
+      </div>`;
+    }
+  }
+
+  document.getElementById('case-modal-content').innerHTML = html;
+}
+
+function closeCaseModal() {
+  document.getElementById('case-modal').classList.remove('open');
+}
+
+async function submitReview(caseId) {
+  const diag  = document.getElementById('doctor-diag-select').value;
+  const notes = document.getElementById('doctor-notes-input').value;
+  if (!diag) { showToast('Please select a diagnosis', 2000); return; }
+
+  try {
+    const res = await fetch(`/api/doctor/review/${caseId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + state.doctorToken,
+      },
+      body: JSON.stringify({ doctor_diagnosis: diag, doctor_notes: notes }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail);
+    showToast('✅ Review submitted successfully!');
+    closeCaseModal();
+    loadDoctorCases();
+  } catch(e) {
+    showToast('❌ ' + e.message, 4000);
+  }
+}
+
+async function generateReportForCase(caseId) {
+  showToast('⏳ Generating PDF report…', 3000);
+  try {
+    const res = await fetch(`/api/report/${caseId}`, { method:'POST' });
+    if (!res.ok) {
+      const d = await res.json();
+      showToast('❌ ' + (d.detail||'Failed'), 4000); return;
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `pneumonia_report_${caseId}.pdf`; a.click();
+    URL.revokeObjectURL(url);
+    showToast('✅ Report downloaded!');
+  } catch(e) {
+    showToast('❌ ' + e.message, 4000);
+  }
+}
+
+// ─── AI Chat Agent ─────────────────────────────────────────────────────────
+let chatOpen = false;
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  document.getElementById('chat-popup').classList.toggle('open', chatOpen);
+  if (chatOpen) document.getElementById('chat-input').focus();
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const msg   = input.value.trim();
+  if (!msg) return;
+
+  appendChat('user', msg);
+  input.value = '';
+
+  const typingId = appendChat('bot', '● ● ●', 'typing');
+
+  try {
+    const res  = await fetch('/api/agent/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, case_id: state.currentCaseId }),
+    });
+    const data = await res.json();
+    removeChat(typingId);
+    appendChat('bot', data.response);
+  } catch(e) {
+    removeChat(typingId);
+    appendChat('bot', 'Sorry, I encountered an error. Please try again.');
+  }
+}
+
+let chatMsgId = 0;
+function appendChat(role, text, extraClass = '') {
+  const id  = 'cmsg-' + (++chatMsgId);
+  const div = document.createElement('div');
+  div.id        = id;
+  div.className = `chat-msg ${role} ${extraClass}`;
+  div.textContent = text;
+  const msgs = document.getElementById('chat-messages');
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return id;
+}
+function removeChat(id) {
+  const el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+// ─── Toast ─────────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ─── Doctor token auto-restore ─────────────────────────────────────────────
+if (state.doctorToken) {
+  // Verify token is still valid on load
+  fetch('/api/doctor/cases', {
+    headers: { 'Authorization': 'Bearer ' + state.doctorToken }
+  }).then(r => {
+    if (r.status === 401) {
+      localStorage.removeItem('doctor_token');
+      state.doctorToken = null;
+    }
+  }).catch(() => {});
+}
+
+// ─── Load history on start ─────────────────────────────────────────────────
+loadHistory();
+</script>
+</body>
+</html>
